@@ -1,0 +1,67 @@
+name: Deploy Calendoor to GitHub Pages
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Find or unzip the site
+        run: |
+          set -e
+          mkdir -p site
+
+          if [ -f "calendoor.zip" ]; then
+            echo "Found calendoor.zip — unzipping it."
+            unzip -q calendoor.zip -d _unzipped
+            # calendoor.zip contains a top-level "calendoor" folder — use its contents.
+            if [ -d "_unzipped/calendoor" ]; then
+              cp -r _unzipped/calendoor/. site/
+            else
+              cp -r _unzipped/. site/
+            fi
+          elif [ -d "calendoor" ]; then
+            echo "Found calendoor/ folder — using it directly."
+            cp -r calendoor/. site/
+          elif [ -f "index.html" ]; then
+            echo "Found index.html at repo root — using the repo root."
+            cp -r . site/
+            rm -rf site/.git site/.github
+          else
+            echo "Couldn't find calendoor.zip, a calendoor/ folder, or a root index.html." >&2
+            exit 1
+          fi
+
+          echo "Deploying these files:"
+          find site -maxdepth 2
+
+      - name: Upload build as Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
